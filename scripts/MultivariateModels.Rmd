@@ -1,0 +1,387 @@
+---
+title: "Prognostic markers of inflammation in endometrioid and clear cell ovarian cancer"
+subtitle: "Multivariate survival models"
+author: "Barbara Hernando"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(kableExtra)
+
+# WORKING DIRECTORY
+PATH <- "C:/Users/bhernando/Desktop/CNIO/Projects/MariaProject/Alex"
+
+# LIBRARIES
+library(readxl)
+library(survival)
+library(dplyr)
+```
+
+## LOAD DATA
+
+```{r load_data, warning=FALSE}
+#Read localized and advanced data 
+BDL <- read_excel(paste0(PATH,"/BDL.xlsx"))
+BDA <- read_excel(paste0(PATH,"/BDA.xlsx"))
+
+#Join both datasets
+BD <- rbind(BDA, BDL)
+```
+
+## PROCESS VARIABLES
+
+```{r process_data}
+#SURVIVAL
+#Calculate survival in days
+diag<-gsub(x=BD$DIAG,pattern=" UTC",replacement="",fixed=T)
+dead<-gsub(x=BD$LASTv,pattern=" UTC",replacement="",fixed=T)
+BD$Survival <- as.Date(dead, format="%Y-%m-%d")-as.Date(diag, format="%Y-%m-%d") #in days
+BD$Survival <- BD$Survival/365 #in years
+BD$Survival <- BD$Survival*12 #in months
+
+#RESIDUALS --> 0=No / 1=Yes
+BD$RESIDUALsD <- factor(BD$RESIDUALsD, labels=c("No","Yes"))
+
+#SUBTYPE --> 0=EOC / 1=CCOC
+BD$SUBTYPE <- factor(BD$SUBTYPE, labels=c("EOC","CCOC"))
+
+#AGE
+BD$AGE <- as.numeric(BD$AGEY)
+
+#FIGO --> 0=localized / 1=advanced
+BD$FIGO <- factor(BD$FIGOL, labels=c("Stage I/II", "Stage III/IV"))
+
+#ENDOMETROSIS -->0=No / 1=Yes
+BD$ENDOMETRIOSIS[BD$ENDOMETRIOSIS==0]<-2 #0 is changed to 2 because the reference category is Yes
+BD$ENDOMETRIOSIS <- factor(BD$ENDOMETRIOSIS, labels=c("Yes", "No"))
+
+#CD3T OTTA (intratumoral) --> none/low <=2 / medium/high >2
+BD$CD3TO <- cut(as.numeric(BD$CD3T), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+
+#CD3iT OTTA (intraepithelial) --> none/low <=2 / medium/high >2
+BD$CD3iTO <- cut(as.numeric(BD$CD3iT), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+
+#CD8T OTTA (intratumoral) --> none/low <=2 / medium/high >2
+BD$CD8TO <- cut(as.numeric(BD$CD8T), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+
+#CD8iT OTTA (intratumoral) --> none/low <=2 / medium/high >2
+BD$CD8iTO <- cut(as.numeric(BD$CD8iT), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+```
+
+### SPLIT DATA BY HISTOLOGICAL SUBTYPE
+The database is split by histological subtype. Moreover, we have removed the advanced tumours in ECC for survival analyses because there are only 13 samples
+```{r subtypes}
+CC <- BD[BD$SUBTYPE == "CCOC",] #clear cell == 1
+ED <- BD[BD$SUBTYPE == "EOC",] #endometrioid == 0
+ED <- ED[ED$FIGO != "Stage III/IV",]
+```
+
+### MULTIVARIATE SURVIVAL ANALYSES
+
+#### 1. Intratumoral CD8
+
+##### 1.1. Clear cell ovarian carcinomas (CCOC)
+
+```{r km1, fig1, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD8TO+FIGO, data = CC)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+```{r hr1,  fig2, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD8TO+FIGO+AGE+RESIDUALsD, data = CC)
+p <- ggforest(fit.coxph, data = CC, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+##### 1.2. Endometroid ovarian carcinomas (EOC)
+
+```{r km2, fig3, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD8TO, data = ED)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+```{r hr2,  fig4, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD8TO+AGE, data = ED)
+p <- ggforest(fit.coxph, data = ED, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+#### 2. Intraepithelial CD8:
+
+##### 2.1. Clear cell ovarian carcinomas (CCOC)
+```{r km3, fig5, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD8iTO+FIGO, data = CC)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+```{r hr3,  fig6, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD8iTO+FIGO+AGE+RESIDUALsD, data = CC)
+p <- ggforest(fit.coxph, data = CC, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+##### 2.2. Endometroid ovarian carcinomas (EOC)
+```{r km4, fig7, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD8iTO, data = ED)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+```{r hr4,  fig8, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD8iTO+AGE, data = ED)
+p <- ggforest(fit.coxph, data = ED, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+#### 3. Intratumoral CD3:
+
+##### 3.1. Clear cell ovarian carcinomas (CCOC)
+
+```{r km5, fig9, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD3TO+FIGO, data = CC)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+```{r hr5,  fig10, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD3TO+FIGO+AGE+RESIDUALsD, data = CC)
+p <- ggforest(fit.coxph, data = CC, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+##### 3.2. Endometroid ovarian carcinomas (EOC)
+
+```{r km6, fig10, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD3TO, data = ED)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+```{r hr6,  fig11, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD3TO+AGE, data = ED)
+p <- ggforest(fit.coxph, data = ED, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+#### 4. Intraepithelial CD3:
+
+##### 4.1. Clear cell ovarian carcinomas (CCOC)
+
+```{r km7, fig12, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD3iTO+FIGO, data = CC)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+Then, we performed a cox proportional-hazards model corrected by other confounding variables. We have only corrected by the variables included in the OTTA study
+```{r hr7,  fig13, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD3iTO+FIGO+AGE+RESIDUALsD, data = CC)
+p<- ggforest(fit.coxph, data = CC, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+##### 4.2. Endometroid ovarian carcinomas (EOC)
+
+```{r km8, fig14, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ CD3iTO, data = ED)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+```{r hr8,  fig15, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ CD3iTO+AGE, data = ED)
+p <- ggforest(fit.coxph, data = ED, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+#### 5. NLR:
+Threshold used to categorize samples is the median
+
+##### 5.1. Clear cell ovarian carcinomas (CCOC)
+
+```{r km9, fig16, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+median <- median(as.numeric(CC$NL), na.rm=TRUE)
+CC$NLR <- cut(as.numeric(CC$NL), breaks=c(-Inf, median, Inf), labels=c("Low","High"))
+fit <- survfit(Surv(Survival, DEATHo) ~ NLR+FIGO, data = CC)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+```{r hr9,  fig17, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ NLR+FIGO+AGE+RESIDUALsD, data = CC)
+p<- ggforest(fit.coxph, data = CC, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+##### 5.2. Endometroid ovarian carcinomas (EOC)
+
+```{r km10, fig18, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+median <- median(as.numeric(ED$NL), na.rm=TRUE)
+ED$NLR <- cut(as.numeric(ED$NL), breaks=c(-Inf, median, Inf), labels=c("Low","High"))
+fit <- survfit(Surv(Survival, DEATHo) ~ NLR, data = ED)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+```{r hr10,  fig19, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ NLR+AGE, data = ED)
+p <- ggforest(fit.coxph, data = ED, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+#### 6. ENDOMETRIOSIS:
+
+##### 6.1. Clear cell ovarian carcinomas (CCOC)
+
+```{r km11, fig20, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ ENDOMETRIOSIS+FIGO, data = CC)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+```{r hr11,  fig21, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ ENDOMETRIOSIS+FIGO+AGE+RESIDUALsD, data = CC)
+p<- ggforest(fit.coxph, data = CC, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```
+
+##### 6.2. Endometroid ovarian carcinomas (EOC)
+
+```{r km12, fig22, fig.height = 6, fig.width = 14, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit <- survfit(Surv(Survival, DEATHo) ~ ENDOMETRIOSIS, data = ED)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+```{r hr12,  fig23, fig.height = 4, fig.width = 10, fig.align = "center", eval=TRUE, echo=FALSE, warning=FALSE}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ ENDOMETRIOSIS+AGE, data = ED)
+p <- ggforest(fit.coxph, data = ED, main = "Hazard ratio", fontsize = 0.7)
+print(p)
+```

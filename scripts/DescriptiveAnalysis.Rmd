@@ -1,0 +1,152 @@
+---
+title: "Prognostic markers of inflammation in endometrioid and clear cell ovarian cancer"
+subtitle: "Descriptive analysis"
+author: "Barbara Hernando"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(kableExtra)
+
+# WORKING DIRECTORY
+PATH <- "C:/Users/bhernando/Desktop/CNIO/Projects/MariaProject/Alex"
+
+# LIBRARIES
+library(readxl)
+library(survival)
+library(dplyr)
+```
+
+## LOAD DATA
+
+```{r load_data, warning=FALSE}
+#Read localized and advanced data 
+BDL <- read_excel(paste0(PATH,"/BDL.xlsx"))
+BDA <- read_excel(paste0(PATH,"/BDA.xlsx"))
+
+#Join both datasets
+BD <- rbind(BDA, BDL)
+```
+
+## PROCESS VARIABLES
+
+```{r process_data}
+#SURVIVAL
+#Calculate survival in days
+diag<-gsub(x=BD$DIAG,pattern=" UTC",replacement="",fixed=T)
+dead<-gsub(x=BD$LASTv,pattern=" UTC",replacement="",fixed=T)
+BD$Survival <- as.Date(dead, format="%Y-%m-%d")-as.Date(diag, format="%Y-%m-%d") #in days
+BD$Survival <- BD$Survival/365 #in years
+BD$Survival <- BD$Survival*12 #in months
+
+#RESIDUALS --> 0=No / 1=Yes
+BD$RESIDUALsD <- factor(BD$RESIDUALsD, labels=c("No","Yes"))
+
+#SUBTYPE --> 0=EOC / 1=CCOC
+BD$SUBTYPE <- factor(BD$SUBTYPE, labels=c("EOC","CCOC"))
+
+#AGE
+BD$AGE <- as.numeric(BD$AGEY)
+
+#FIGO --> 0=localized / 1=advanced
+BD$FIGO <- factor(BD$FIGOL, labels=c("Stage I/II", "Stage III/IV"))
+
+#ENDOMETROSIS -->0=No / 1=Yes
+BD$ENDOMETRIOSIS[BD$ENDOMETRIOSIS==0]<-2 #0 is changed to 2 because the reference category is Yes
+BD$ENDOMETRIOSIS <- factor(BD$ENDOMETRIOSIS, labels=c("Yes", "No"))
+```
+
+## SPLIT DATA BY HISTOLOGICAL SUBTYPE
+
+```{r subtypes}
+CC <- BD[BD$SUBTYPE == "CCOC",] #clear cell == 1
+ED <- BD[BD$SUBTYPE == "EOC",] #endometrioid == 0
+```
+
+## DESCRIPTION ANALYSES
+### 1. Sample size per subtype and stage
+```{r dist1}
+table <- xtabs(~BD$SUBTYPE+BD$FIGO, data=BD)
+ftable(table)
+summary(table)
+```
+### 2. AGE
+```{r dist2}
+#All population
+median(BD$AGE, na.rm=T)
+max(BD$AGE, na.rm=T)
+min(BD$AGE, na.rm=T)
+#EOC
+median(ED$AGE, na.rm=T)
+max(ED$AGE, na.rm=T)
+min(ED$AGE, na.rm=T)
+#CCOC
+median(CC$AGE, na.rm=T)
+max(CC$AGE, na.rm=T)
+min(CC$AGE, na.rm=T)
+```
+### 3. Residual disease per subtype and stage
+```{r dist3}
+table <- xtabs(~BD$FIGO+BD$SUBTYPE+BD$RESIDUALs, data=BD)
+ftable(table)
+summary(table)
+```
+
+### 4. ENDOMETRIOSIS distribution per subtype and stage
+```{r dist4}
+table <- xtabs(~BD$FIGO+BD$SUBTYPE+BD$ENDOMETRIOSIS, data=BD)
+ftable(table)
+summary(table)
+```
+
+### 5. CD8TO distribution per subtype
+```{r dist5}
+BD$CD8TO[BD$CD8TO==9]<-NA
+table <- xtabs(~BD$SUBTYPE+BD$CD8TO, data=BD)
+ftable(table)
+summary(table)
+```
+### 6. CD8iTO distribution per subtype
+```{r dist6}
+BD$CD8iTO[BD$CD8iTO==9]<-NA
+table <- xtabs(~BD$SUBTYPE+BD$CD8iTO, data=BD)
+ftable(table)
+summary(table)
+```
+### 7. CD3TO distribution per subtype
+```{r dist7}
+BD$CD3TO[BD$CD3TO==9]<-NA
+table <- xtabs(~BD$SUBTYPE+BD$CD3TO, data=BD)
+ftable(table)
+summary(table)
+```
+
+### 8. CD3iTO distribution per subtype
+```{r dist8}
+BD$CD3iTO[BD$CD3iTO==9]<-NA
+table <- xtabs(~BD$SUBTYPE+BD$CD3iTO, data=BD)
+ftable(table)
+summary(table)
+```
+
+### 9. NLR distribution per stage in EOC
+```{r dist9}
+median <- median(as.numeric(ED$NL), na.rm=TRUE)
+ED$NLR <- cut(as.numeric(ED$NL), breaks=c(-Inf, median, Inf), labels=c("Low","High"))
+table <- xtabs(~ED$FIGO+ED$NLR, data=ED)
+ftable(table)
+summary(table)
+```
+
+### 9. NLR distribution per stage in CCOC
+```{r dist9}
+median <- median(as.numeric(CC$NL), na.rm=TRUE)
+CC$NLR <- cut(as.numeric(CC$NL), breaks=c(-Inf, median, Inf), labels=c("Low","High"))
+table <- xtabs(~CC$FIGO+CC$NLR, data=CC)
+ftable(table)
+summary(table)
+```

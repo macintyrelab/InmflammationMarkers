@@ -1,0 +1,203 @@
+---
+title: "Prognostic markers of inflammation in endometrioid and clear cell ovarian cancer"
+subtitle: "Univariate survival models"
+author: "Barbara Hernando"
+output: 
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(magrittr)
+library(kableExtra)
+
+# WORKING DIRECTORY
+PATH <- "C:/Users/bhernando/Desktop/CNIO/Projects/MariaProject/Alex"
+
+# LIBRARIES
+library(readxl)
+library(survival)
+library(dplyr)
+```
+
+## LOAD DATA
+
+```{r load_data, warning=FALSE}
+#Read localized and advanced data 
+BDL <- read_excel(paste0(PATH,"/BDL.xlsx"))
+BDA <- read_excel(paste0(PATH,"/BDA.xlsx"))
+
+#Join both datasets
+BD <- rbind(BDA, BDL)
+```
+
+## PROCESS VARIABLES
+
+```{r process_data}
+#SURVIVAL
+#Calculate survival in days
+diag<-gsub(x=BD$DIAG,pattern=" UTC",replacement="",fixed=T)
+dead<-gsub(x=BD$LASTv,pattern=" UTC",replacement="",fixed=T)
+BD$Survival <- as.Date(dead, format="%Y-%m-%d")-as.Date(diag, format="%Y-%m-%d") #in days
+BD$Survival <- BD$Survival/365 #in years
+BD$Survival <- BD$Survival*12 #in months
+
+#RESIDUALS --> 0=No / 1=Yes
+BD$RESIDUALsD <- factor(BD$RESIDUALsD, labels=c("No","Yes"))
+
+#SUBTYPE --> 0=EOC / 1=CCOC
+BD$SUBTYPE <- factor(BD$SUBTYPE, labels=c("EOC","CCOC"))
+
+#AGE
+BD$AGE <- as.numeric(BD$AGEY)
+
+#FIGO --> 0=localized / 1=advanced
+BD$FIGO <- factor(BD$FIGOL, labels=c("Stage I/II", "Stage III/IV"))
+
+#ENDOMETROSIS -->0=No / 1=Yes
+BD$ENDOMETRIOSIS[BD$ENDOMETRIOSIS==0]<-2 #0 is changed to 2 because the reference category is Yes
+BD$ENDOMETRIOSIS <- factor(BD$ENDOMETRIOSIS, labels=c("Yes", "No"))
+
+#CD3T OTTA (intratumoral) --> none/low <=2 / medium/high >2
+BD$CD3TO <- cut(as.numeric(BD$CD3T), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+
+#CD3iT OTTA (intraepithelial) --> none/low <=2 / medium/high >2
+BD$CD3iTO <- cut(as.numeric(BD$CD3iT), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+
+#CD8T OTTA (intratumoral) --> none/low <=2 / medium/high >2
+BD$CD8TO <- cut(as.numeric(BD$CD8T), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+
+#CD8iT OTTA (intratumoral) --> none/low <=2 / medium/high >2
+BD$CD8iTO <- cut(as.numeric(BD$CD8iT), breaks=c(-Inf, 2, Inf), labels=c("None/Low","Medium/High"))
+```
+
+### SPLIT DATA BY HISTOLOGICAL SUBTYPE
+The database is split by histological subtype. Moreover, we have removed the advanced tumours in ECC for survival analyses because there are only 13 samples
+```{r subtypes}
+CC <- BD[BD$SUBTYPE == "CCOC",] #clear cell == 1
+ED <- BD[BD$SUBTYPE == "EOC",] #endometrioid == 0
+ED <- ED[ED$FIGO != "Stage III/IV",]
+```
+
+### UNIVARIATE SURVIVAL ANALYSIS
+#### 1. FIGO:
+```{r univariate_figo}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ FIGO, data = BD)
+summary(fit.coxph)
+```
+
+```{r km_figo}
+fit <- survfit(Surv(Survival, DEATHo) ~ FIGO, data = BD)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+#### 2. AGE
+```{r univariate_age}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ AGE, data = BD)
+summary(fit.coxph)
+```
+
+#### 3. RESIDUAL DISEASE in CCOC
+```{r univariate_residuals}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ RESIDUALsD, data = CC)
+summary(fit.coxph)
+```
+
+```{r km2}
+fit <- survfit(Surv(Survival, DEATHo) ~ RESIDUALsD, data = CC)
+cols2=c("palegreen2", "palegreen4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+#### 4. SUBTYPE
+```{r univariate_subtype}
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ SUBTYPE, data = BD)
+summary(fit.coxph)
+```
+
+```{r km3}
+fit <- survfit(Surv(Survival, DEATHo) ~ SUBTYPE, data = BD)
+cols2=c("firebrick1", "firebrick4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols2)
+print(p)
+```
+
+#### 5. SUBTYPE & STAGE
+```{r univariate_subtype_early}
+Ear <- BD[BD$FIGO == "Stage I/II",]
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ SUBTYPE, data = Ear)
+summary(fit.coxph)
+```
+
+```{r univariate_subtype_advanced}
+Adv <- BD[BD$FIGO == "Stage III/IV",]
+fit.coxph <- coxph(Surv(Survival, DEATHo) ~ SUBTYPE, data = Adv)
+summary(fit.coxph)
+```
+
+```{r km5}
+BD$Groups <- NA
+BD$Groups[BD$FIGO=="Stage I/II" & BD$SUBTYPE=="EOC"] <- "1"
+BD$Groups[BD$FIGO=="Stage I/II" & BD$SUBTYPE=="CCOC"] <- "2"
+BD$Groups[BD$FIGO=="Stage III/IV" & BD$SUBTYPE=="EOC"] <- "3"
+BD$Groups[BD$FIGO=="Stage III/IV" & BD$SUBTYPE=="CCOC"] <- "4"
+
+fit <- survfit(Surv(Survival, DEATHo) ~ Groups, data = BD)
+cols4=c("firebrick1", "dodgerblue1", "firebrick4", "dodgerblue4")
+p <- ggsurvplot(fit,
+          pval = TRUE, conf.int = FALSE,
+          risk.table = TRUE, # Add risk table
+          risk.table.col = "strata", # Change risk table color by groups
+          linetype = "strata", # Change line type by groups
+          surv.median.line = "hv", # Specify median survival
+          ggtheme = theme_bw(base_size = 8), # Change ggplot2 theme
+          #xlim=c(0,180),
+          break.time.by=50,
+          palette = cols4)
+print(p)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
