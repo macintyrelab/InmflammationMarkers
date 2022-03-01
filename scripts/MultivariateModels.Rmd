@@ -13,20 +13,21 @@ library(magrittr)
 library(kableExtra)
 
 # WORKING DIRECTORY
-PATH <- "C:/Users/bhernando/Desktop/CNIO/Projects/MariaProject/Alex"
+PATH <- dirname(rstudioapi::getSourceEditorContext()$path)
 
 # LIBRARIES
 library(readxl)
 library(survival)
 library(dplyr)
+library(survminer)
 ```
 
 ## LOAD DATA
 
 ```{r load_data, warning=FALSE}
 #Read localized and advanced data 
-BDL <- read_excel(paste0(PATH,"/BDL.xlsx"))
-BDA <- read_excel(paste0(PATH,"/BDA.xlsx"))
+BDL <- read_excel(paste0(PATH,"/data/BDL.xlsx"))
+BDA <- read_excel(paste0(PATH,"/data/BDA.xlsx"))
 
 #Join both datasets
 BD <- rbind(BDA, BDL)
