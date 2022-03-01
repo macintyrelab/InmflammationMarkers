@@ -142,8 +142,8 @@ ftable(table)
 summary(table)
 ```
 
-### 9. NLR distribution per stage in CCOC
-```{r dist9}
+### 10. NLR distribution per stage in CCOC
+```{r dist10}
 median <- median(as.numeric(CC$NL), na.rm=TRUE)
 CC$NLR <- cut(as.numeric(CC$NL), breaks=c(-Inf, median, Inf), labels=c("Low","High"))
 table <- xtabs(~CC$FIGO+CC$NLR, data=CC)
